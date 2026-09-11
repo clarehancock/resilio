@@ -200,7 +200,7 @@ function openModal(domainCode, activityId) {
         <div class="practice-row">
           <div class="label">What do you currently do here?</div>
           <div class="hint">Optional — a few sentences on your actual current practice. This will be used later to give you more tailored guidance.</div>
-          <textarea class="practice-input" id="practice-input" rows="3" placeholder="e.g. We run an annual risk assessment led by IT, but it's not tied to a formal register...">${rating.currentPractice || ""}</textarea>
+          <textarea class="practice-input" id="practice-input" rows="3" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" placeholder="e.g. We run an annual risk assessment led by IT, but it's not tied to a formal register...">${rating.currentPractice || ""}</textarea>
         </div>
 
         <div id="gap-summary">${gapText}</div>
