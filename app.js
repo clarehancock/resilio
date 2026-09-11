@@ -75,10 +75,6 @@ function renderGrid() {
   const totalCells = DOMAINS.reduce((n, d) => n + d.activities.length, 0);
   const ratedCount = allRatedCells().length;
 
-  const legend = DOMAINS.map(
-    (d) => `<div class="legend-item"><span class="legend-swatch" style="background:${d.color}"></span>${d.code} &middot; ${d.name}</div>`
-  ).join("");
-
   const BOX_W = 146, GAP = 18; // must match .domain-column width and .domain-row gap in styles.css
   const pillarBar = PILLARS.map((pillar) => {
     const count = DOMAINS.filter((d) => d.pillar === pillar.id).length;
@@ -92,12 +88,12 @@ function renderGrid() {
         const key = cellKey(domain.code, activity.id);
         const r = ratings[key];
         const rated = r && r.competency != null && r.priority != null;
+        const ringStyle = rated ? `box-shadow:0 0 0 3px ${gapColor(r.priority - r.competency)}` : "";
+        const title = rated ? `${activity.label} — Competency ${r.competency}, Priority ${r.priority}` : `${activity.label} — not yet rated`;
         return `
-          <button class="activity-box" style="background:${domain.color}"
-            data-domain="${domain.code}" data-activity="${activity.id}">
-            <span class="scf-tag">SCF &middot; ${domain.code}</span>
+          <button class="activity-box" style="background:${domain.color};${ringStyle}"
+            data-domain="${domain.code}" data-activity="${activity.id}" title="${title}">
             ${activity.label}
-            ${rated ? `<span class="score-badge">C${r.competency}P${r.priority}</span>` : ""}
           </button>`;
       })
       .join("");
@@ -111,7 +107,6 @@ function renderGrid() {
 
   el.innerHTML = `
     <div class="grid-meta"><strong>${ratedCount} / ${totalCells}</strong> activities scored — click any box to rate it</div>
-    <div class="legend">${legend}</div>
     <div class="grid-scroll">
       <div class="pillar-bar">${pillarBar}</div>
       <div class="domain-row">${columns}</div>
