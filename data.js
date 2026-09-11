@@ -1,344 +1,132 @@
-// ---- State ----
-// ratings: { "CODE-function": { competency, priority, driver } }
-let ratings = {};
-try {
-  ratings = JSON.parse(localStorage.getItem("grc-ratings") || "{}");
-} catch (e) {
-  ratings = {};
-}
+// Real SCF top-12 domains (by relevance to ISO 27001, 27701, 42001, NIS2, DORA, SOC 2, EU AI Act).
+// Each domain gets a small set of genuinely distinct named practices - siblings, not
+// pipeline stages - the same way Pragmatic's columns hold different activities, not
+// steps of one activity.
 
-const DRIVERS = [
-  { id: "strategic", label: "Strategic choice" },
-  { id: "regulatory", label: "Regulatory deadline" },
-  { id: "audit", label: "Audit finding" },
-  { id: "contractual", label: "Contractual" },
+const FUNCTIONS = [
+  { id: "govern", name: "Govern" },
+  { id: "identify", name: "Identify" },
+  { id: "protect", name: "Protect" },
+  { id: "detect", name: "Detect" },
+  { id: "respond", name: "Respond" },
+  { id: "recover", name: "Recover" },
 ];
 
-function cellKey(domainCode, activityId) {
-  return `${domainCode}-${activityId}`;
-}
-
-function saveRatings() {
-  localStorage.setItem("grc-ratings", JSON.stringify(ratings));
-}
-
-function updateRating(domainCode, activityId, patch) {
-  const key = cellKey(domainCode, activityId);
-  const current = ratings[key] || { competency: null, priority: null, driver: null };
-  ratings[key] = { ...current, ...patch };
-  saveRatings();
-  renderAll();
-}
-
-function gapColor(gap) {
-  if (gap >= 3) return "var(--red)";
-  if (gap >= 1) return "var(--amber)";
-  return "var(--green)";
-}
-
-function allRatedCells() {
-  const out = [];
-  for (const domain of DOMAINS) {
-    for (const activity of domain.activities) {
-      const r = ratings[cellKey(domain.code, activity.id)];
-      if (r && r.competency != null && r.priority != null) {
-        out.push({
-          domain,
-          activity,
-          competency: r.competency,
-          priority: r.priority,
-          driver: r.driver,
-          gap: r.priority - r.competency,
-        });
-      }
-    }
-  }
-  return out;
-}
-
-// ---- Tabs ----
-
-document.getElementById("tabs").addEventListener("click", (e) => {
-  const btn = e.target.closest(".tab");
-  if (!btn) return;
-  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-  btn.classList.add("active");
-  const target = btn.dataset.tab;
-  document.querySelectorAll(".view").forEach((v) => (v.hidden = true));
-  document.getElementById(`view-${target}`).hidden = false;
-});
-
-// ---- Grid view ----
-
-const NAVY = "#264160";
-const BOX_H = 66, BOX_MARGIN = 16;
-const SLOT = BOX_H + BOX_MARGIN; // total vertical space one box occupies
-
-function renderGrid() {
-  const el = document.getElementById("view-grid");
-  const totalCells = DOMAINS.reduce((n, d) => n + d.activities.length, 0);
-  const ratedCount = allRatedCells().length;
-
-  const byFn = {};
-  FUNCTIONS.forEach((fn) => (byFn[fn.id] = []));
-  DOMAINS.forEach((domain) => {
-    domain.activities.forEach((activity) => {
-      byFn[activity.fn].push({ domain, activity });
-    });
-  });
-
-  // Split each column's own items roughly evenly above/below - pure visual balance,
-  // not a semantic grouping. The extra item (for odd counts) goes above.
-  const splits = {};
-  FUNCTIONS.forEach((fn) => {
-    const n = byFn[fn.id].length;
-    const aboveCount = Math.ceil(n / 2);
-    splits[fn.id] = { above: byFn[fn.id].slice(0, aboveCount), below: byFn[fn.id].slice(aboveCount) };
-  });
-
-  const aboveHeight = Math.max(...FUNCTIONS.map((f) => splits[f.id].above.length)) * SLOT;
-  const belowHeight = Math.max(...FUNCTIONS.map((f) => splits[f.id].below.length)) * SLOT;
-
-  const renderBox = ({ domain, activity }) => {
-    const key = cellKey(domain.code, activity.id);
-    const r = ratings[key];
-    const rated = r && r.competency != null && r.priority != null;
-    const ringStyle = rated ? `box-shadow:0 0 0 3px ${gapColor(r.priority - r.competency)}` : "";
-    const title = rated
-      ? `${activity.label} (${domain.code}) — Competency ${r.competency}, Priority ${r.priority}`
-      : `${activity.label} (${domain.code}) — not yet rated`;
-    return `
-      <button class="activity-box" style="background:${NAVY};${ringStyle}"
-        data-domain="${domain.code}" data-activity="${activity.id}" title="${title}">
-        <span class="scf-tag">${domain.code}</span>
-        ${activity.label}
-      </button>`;
-  };
-
-  const columns = FUNCTIONS.map((fn) => {
-    const { above, below } = splits[fn.id];
-    return `
-      <div class="domain-column">
-        <div class="above-region" style="height:${aboveHeight}px">${above.map(renderBox).join("")}</div>
-        <div class="domain-label">${fn.name}</div>
-        <div class="below-region" style="height:${belowHeight}px">${below.map(renderBox).join("")}</div>
-      </div>`;
-  }).join("");
-
-  el.innerHTML = `
-    <div class="grid-meta"><strong>${ratedCount} / ${totalCells}</strong> activities scored — click any box to rate it</div>
-    <div class="grid-scroll">
-      <div class="domain-row">${columns}</div>
-    </div>
-  `;
-
-  el.querySelectorAll(".activity-box").forEach((box) => {
-    box.addEventListener("click", () => {
-      openModal(box.dataset.domain, box.dataset.activity);
-    });
-  });
-}
-
-// ---- Modal ----
-
-function openModal(domainCode, activityId) {
-  const domain = DOMAINS.find((d) => d.code === domainCode);
-  const activity = domain.activities.find((a) => a.id === activityId);
-  const key = cellKey(domainCode, activityId);
-  const rating = ratings[key] || { competency: null, priority: null, driver: null };
-
-  const root = document.getElementById("modal-root");
-
-  const scoreButtons = (kind, value, colorClass) =>
-    [1, 2, 3, 4, 5]
-      .map(
-        (n) => `<button class="score-btn ${n === value ? "selected " + colorClass : ""}" data-kind="${kind}" data-value="${n}">${n}</button>`
-      )
-      .join("");
-
-  const driverChips = DRIVERS.map(
-    (d) => `<button class="driver-chip ${rating.driver === d.id ? "selected" : ""}" data-driver="${d.id}">${d.label}</button>`
-  ).join("");
-
-  const gap = rating.competency != null && rating.priority != null ? rating.priority - rating.competency : null;
-  const gapText =
-    gap == null
-      ? ""
-      : `<div class="gap-summary">Gap: <strong style="color:${gapColor(gap)}">${gap}</strong>${
-          gap >= 3 ? " — urgent focus area" : gap >= 1 ? " — worth attention" : " — currently in good shape"
-        }</div>`;
-
-  root.innerHTML = `
-    <div class="modal-backdrop" id="modal-backdrop">
-      <div class="modal">
-        <div class="modal-head">
-          <div>
-            <div class="modal-meta"><span class="dot" style="background:${domain.color}"></span>SCF &middot; ${domain.code}</div>
-            <h3>${activity.label}</h3>
-          </div>
-          <button class="modal-close" id="modal-close">&times;</button>
-        </div>
-
-        <div class="score-row">
-          <div class="label">Competency</div>
-          <div class="hint">How good are we at this today?</div>
-          <div class="score-buttons">${scoreButtons("competency", rating.competency, "competency")}</div>
-        </div>
-
-        <div class="score-row">
-          <div class="label">Priority</div>
-          <div class="hint">How much does improving this matter right now?</div>
-          <div class="score-buttons">${scoreButtons("priority", rating.priority, "priority")}</div>
-        </div>
-
-        <div class="driver-row">
-          <div class="label">What's driving the priority?</div>
-          <div class="driver-chips">${driverChips}</div>
-        </div>
-
-        <div id="gap-summary">${gapText}</div>
-      </div>
-    </div>
-  `;
-
-  root.querySelector("#modal-backdrop").addEventListener("click", (e) => {
-    if (e.target.id === "modal-backdrop") closeModal();
-  });
-  root.querySelector("#modal-close").addEventListener("click", closeModal);
-
-  root.querySelectorAll(".score-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const kind = btn.dataset.kind;
-      const value = Number(btn.dataset.value);
-      updateRating(domainCode, activityId, { [kind]: value });
-      openModal(domainCode, activityId);
-    });
-  });
-
-  root.querySelectorAll(".driver-chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const driverId = chip.dataset.driver;
-      const current = ratings[key] || {};
-      updateRating(domainCode, activityId, { driver: current.driver === driverId ? null : driverId });
-      openModal(domainCode, activityId);
-    });
-  });
-}
-
-function closeModal() {
-  document.getElementById("modal-root").innerHTML = "";
-}
-
-// ---- Matrix view ----
-
-function renderMatrix() {
-  const el = document.getElementById("view-matrix");
-  const cells = allRatedCells();
-
-  if (cells.length === 0) {
-    el.innerHTML = `<div class="empty-state">Score a few activities in the Framework Grid to see them plotted here.</div>`;
-    return;
-  }
-
-  const W = 640,
-    H = 420,
-    PAD = 44;
-  const scale = (v) => PAD + ((v - 0.5) / 5) * (W - PAD * 2);
-  const scaleY = (v) => H - PAD - ((v - 0.5) / 5) * (H - PAD * 2);
-
-  let points = "";
-  cells.forEach((c) => {
-    const x = scale(c.competency);
-    const y = scaleY(c.priority);
-    points += `<circle cx="${x}" cy="${y}" r="6" fill="${c.domain.color}" fill-opacity="0.85">
-      <title>${c.domain.code}\n${c.activity.label}\nC${c.competency} P${c.priority}</title>
-    </circle>`;
-  });
-
-  const midX = scale(2.5),
-    midY = scaleY(2.5);
-
-  const legend = Object.values(
-    cells.reduce((acc, c) => {
-      acc[c.domain.code] = c.domain;
-      return acc;
-    }, {})
-  )
-    .map((d) => `<div class="legend-item"><span class="legend-swatch" style="background:${d.color}"></span>${d.name}</div>`)
-    .join("");
-
-  el.innerHTML = `
-    <p class="matrix-intro">Each point is a scored activity. Low competency + high priority (top left) is where to focus next.</p>
-    <div class="matrix-panel">
-      <div class="quadrant-label" style="top:22px;left:30px;color:var(--red)">FIX NOW</div>
-      <div class="quadrant-label" style="top:22px;right:20px;color:var(--green)">PROTECT</div>
-      <div class="quadrant-label" style="bottom:40px;left:30px;color:var(--muted)">MONITOR</div>
-      <div class="quadrant-label" style="bottom:40px;right:20px;color:var(--amber)">MAINTAIN</div>
-      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
-        <line x1="${midX}" y1="${PAD}" x2="${midX}" y2="${H - PAD}" stroke="var(--border)" stroke-dasharray="4 4" />
-        <line x1="${PAD}" y1="${midY}" x2="${W - PAD}" y2="${midY}" stroke="var(--border)" stroke-dasharray="4 4" />
-        <line x1="${PAD}" y1="${H - PAD}" x2="${W - PAD}" y2="${H - PAD}" stroke="var(--border)" />
-        <line x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${H - PAD}" stroke="var(--border)" />
-        <text x="${W / 2}" y="${H - 10}" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="IBM Plex Sans">Competency</text>
-        <text x="16" y="${H / 2}" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="IBM Plex Sans" transform="rotate(-90 16 ${H / 2})">Priority</text>
-        ${points}
-      </svg>
-    </div>
-    <div class="matrix-legend">${legend}</div>
-  `;
-}
-
-// ---- Focus view ----
-
-function renderFocus() {
-  const el = document.getElementById("view-focus");
-  const cells = allRatedCells();
-
-  if (cells.length === 0) {
-    el.innerHTML = `<div class="empty-state">Score a few activities in the Framework Grid to generate a roadmap.</div>`;
-    return;
-  }
-
-  const sorted = cells.filter((c) => c.gap > 0).sort((a, b) => b.gap - a.gap);
-
-  if (sorted.length === 0) {
-    el.innerHTML = `<div class="empty-state">No urgent gaps — every scored activity has priority at or below competency. Nice work.</div>`;
-    return;
-  }
-
-  const rows = sorted
-    .map(
-      (c) => `
-    <button class="focus-row" style="border-left:4px solid ${gapColor(c.gap)}" data-domain="${c.domain.code}" data-activity="${c.activity.id}">
-      <div>
-        <div class="meta">${c.domain.code}${c.driver ? " &middot; " + DRIVERS.find((d) => d.id === c.driver)?.label : ""}</div>
-        <div class="activity">${c.activity.label}</div>
-      </div>
-      <div class="focus-scores">
-        <div class="focus-score-dot"><div class="value">${c.competency}</div><div class="label">C</div></div>
-        <div class="focus-score-dot"><div class="value">${c.priority}</div><div class="label">P</div></div>
-        <div class="focus-gap" style="color:${gapColor(c.gap)}">+${c.gap}</div>
-      </div>
-    </button>`
-    )
-    .join("");
-
-  el.innerHTML = `
-    <p class="focus-intro">Scored activities where priority outweighs competency, ranked by the size of the gap.</p>
-    <div class="focus-list">${rows}</div>
-  `;
-
-  el.querySelectorAll(".focus-row").forEach((row) => {
-    row.addEventListener("click", () => openModal(row.dataset.domain, row.dataset.activity));
-  });
-}
-
-// ---- Render everything ----
-
-function renderAll() {
-  renderGrid();
-  renderMatrix();
-  renderFocus();
-}
-
-renderAll();
+const DOMAINS = [
+  {
+    code: "AAT",
+    name: "AI & Autonomous Technologies",
+    color: "#8C4B6B",
+    activities: [
+      { id: "safeguards", label: "Trustworthy AI Safeguards", fn: "protect" },
+      { id: "testing", label: "AI Testing & Validation", fn: "detect" },
+    ],
+  },
+  {
+    code: "GOV",
+    name: "Security, Compliance & Resilience Governance",
+    color: "#6B4C3A",
+    activities: [
+      { id: "program", label: "Governance Program & Charter", fn: "govern" },
+      { id: "docs", label: "Roles, Responsibilities & Documentation", fn: "govern" },
+    ],
+  },
+  {
+    code: "RSK",
+    name: "Risk Management",
+    color: "#A23E33",
+    activities: [
+      { id: "identify", label: "Risk Identification & Assessment", fn: "identify" },
+      { id: "treat", label: "Risk Treatment Planning", fn: "protect" },
+      { id: "monitor", label: "Risk Monitoring", fn: "detect" },
+    ],
+  },
+  {
+    code: "CPL",
+    name: "Compliance",
+    color: "#3E6B65",
+    activities: [
+      { id: "program", label: "Regulatory Compliance Program", fn: "govern" },
+      { id: "monitoring", label: "Compliance Monitoring & Evidence", fn: "detect" },
+      { id: "handling", label: "Non-Compliance Handling", fn: "respond" },
+    ],
+  },
+  {
+    code: "PRI",
+    name: "Data Privacy",
+    color: "#4A5D8A",
+    activities: [
+      { id: "program", label: "Privacy Program", fn: "govern" },
+      { id: "rights", label: "Data Subject Rights Management", fn: "respond" },
+      { id: "protection", label: "Personal Data Protection", fn: "protect" },
+    ],
+  },
+  {
+    code: "DCH",
+    name: "Data Classification & Handling",
+    color: "#7A6A9E",
+    activities: [
+      { id: "classification", label: "Data & Asset Classification", fn: "identify" },
+      { id: "handling", label: "Data Handling, Disposal & Scanning", fn: "protect" },
+    ],
+  },
+  {
+    code: "TPM",
+    name: "Third-Party Management",
+    color: "#B8863B",
+    activities: [
+      { id: "inventory", label: "Vendor Inventory & Due Diligence", fn: "identify" },
+      { id: "contracts", label: "Contractual Safeguards", fn: "protect" },
+      { id: "monitor", label: "Vendor Breach Monitoring", fn: "detect" },
+    ],
+  },
+  {
+    code: "HRS",
+    name: "Human Resources Security",
+    color: "#5B7553",
+    activities: [
+      { id: "onboarding", label: "Personnel Screening & Onboarding", fn: "identify" },
+      { id: "roles", label: "Role & Privilege Management", fn: "protect" },
+      { id: "offboarding", label: "Offboarding, Sanctions & Investigations", fn: "respond" },
+    ],
+  },
+  {
+    code: "BCD",
+    name: "Business Continuity & Disaster Recovery",
+    color: "#33586B",
+    activities: [
+      { id: "program", label: "BC/DR Program & Planning", fn: "govern" },
+      { id: "backup", label: "Backup & Recovery Operations", fn: "protect" },
+      { id: "review", label: "Post-Incident Review & Lessons Learned", fn: "recover" },
+    ],
+  },
+  {
+    code: "IRO",
+    name: "Incident Response",
+    color: "#C1666B",
+    activities: [
+      { id: "readiness", label: "IR Program & Readiness", fn: "govern" },
+      { id: "detection", label: "Incident Detection & Tracking", fn: "detect" },
+      { id: "handling", label: "Incident Handling & Recovery", fn: "respond" },
+    ],
+  },
+  {
+    code: "PRM",
+    name: "Project & Resource Management",
+    color: "#6B8E6B",
+    activities: [
+      { id: "portfolio", label: "Security Portfolio & Resource Management", fn: "govern" },
+      { id: "sdlc", label: "Secure Development Lifecycle", fn: "protect" },
+    ],
+  },
+  {
+    code: "IAC",
+    name: "Identification & Authentication",
+    color: "#4B6B8C",
+    activities: [
+      { id: "governance", label: "Identity & Access Governance", fn: "govern" },
+      { id: "provisioning", label: "Provisioning & De-provisioning", fn: "protect" },
+      { id: "review", label: "Access Review", fn: "detect" },
+    ],
+  },
+];

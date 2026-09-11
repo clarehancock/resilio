@@ -70,41 +70,58 @@ document.getElementById("tabs").addEventListener("click", (e) => {
 
 // ---- Grid view ----
 
+const NAVY = "#264160";
+const BOX_H = 66, BOX_MARGIN = 16;
+const SLOT = BOX_H + BOX_MARGIN; // total vertical space one box occupies
+
 function renderGrid() {
   const el = document.getElementById("view-grid");
   const totalCells = DOMAINS.reduce((n, d) => n + d.activities.length, 0);
   const ratedCount = allRatedCells().length;
 
-  const columns = FUNCTIONS.map((fn) => {
-    const items = [];
-    DOMAINS.forEach((domain) => {
-      domain.activities.forEach((activity) => {
-        if (activity.fn === fn.id) items.push({ domain, activity });
-      });
+  const byFn = {};
+  FUNCTIONS.forEach((fn) => (byFn[fn.id] = []));
+  DOMAINS.forEach((domain) => {
+    domain.activities.forEach((activity) => {
+      byFn[activity.fn].push({ domain, activity });
     });
+  });
 
-    const boxes = items
-      .map(({ domain, activity }) => {
-        const key = cellKey(domain.code, activity.id);
-        const r = ratings[key];
-        const rated = r && r.competency != null && r.priority != null;
-        const ringStyle = rated ? `box-shadow:0 0 0 3px ${gapColor(r.priority - r.competency)}` : "";
-        const title = rated
-          ? `${activity.label} (${domain.code}) — Competency ${r.competency}, Priority ${r.priority}`
-          : `${activity.label} (${domain.code}) — not yet rated`;
-        return `
-          <button class="activity-box" style="background:${fn.color};${ringStyle}"
-            data-domain="${domain.code}" data-activity="${activity.id}" title="${title}">
-            <span class="scf-tag">${domain.code}</span>
-            ${activity.label}
-          </button>`;
-      })
-      .join("");
+  // Split each column's own items roughly evenly above/below - pure visual balance,
+  // not a semantic grouping. The extra item (for odd counts) goes above.
+  const splits = {};
+  FUNCTIONS.forEach((fn) => {
+    const n = byFn[fn.id].length;
+    const aboveCount = Math.ceil(n / 2);
+    splits[fn.id] = { above: byFn[fn.id].slice(0, aboveCount), below: byFn[fn.id].slice(aboveCount) };
+  });
 
+  const aboveHeight = Math.max(...FUNCTIONS.map((f) => splits[f.id].above.length)) * SLOT;
+  const belowHeight = Math.max(...FUNCTIONS.map((f) => splits[f.id].below.length)) * SLOT;
+
+  const renderBox = ({ domain, activity }) => {
+    const key = cellKey(domain.code, activity.id);
+    const r = ratings[key];
+    const rated = r && r.competency != null && r.priority != null;
+    const ringStyle = rated ? `box-shadow:0 0 0 3px ${gapColor(r.priority - r.competency)}` : "";
+    const title = rated
+      ? `${activity.label} (${domain.code}) — Competency ${r.competency}, Priority ${r.priority}`
+      : `${activity.label} (${domain.code}) — not yet rated`;
+    return `
+      <button class="activity-box" style="background:${NAVY};${ringStyle}"
+        data-domain="${domain.code}" data-activity="${activity.id}" title="${title}">
+        <span class="scf-tag">${domain.code}</span>
+        ${activity.label}
+      </button>`;
+  };
+
+  const columns = FUNCTIONS.map((fn) => {
+    const { above, below } = splits[fn.id];
     return `
       <div class="domain-column">
-        <div class="box-stack">${boxes}</div>
+        <div class="above-region" style="height:${aboveHeight}px">${above.map(renderBox).join("")}</div>
         <div class="domain-label">${fn.name}</div>
+        <div class="below-region" style="height:${belowHeight}px">${below.map(renderBox).join("")}</div>
       </div>`;
   }).join("");
 
