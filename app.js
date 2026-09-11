@@ -93,7 +93,7 @@ function renderGrid() {
           ? `${activity.label} (${domain.code}) — Competency ${r.competency}, Priority ${r.priority}`
           : `${activity.label} (${domain.code}) — not yet rated`;
         return `
-          <button class="activity-box" style="background:${domain.color};${ringStyle}"
+          <button class="activity-box" style="background:${fn.color};${ringStyle}"
             data-domain="${domain.code}" data-activity="${activity.id}" title="${title}">
             <span class="scf-tag">${domain.code}</span>
             ${activity.label}
@@ -103,7 +103,7 @@ function renderGrid() {
 
     return `
       <div class="domain-column">
-        ${boxes}
+        <div class="box-stack">${boxes}</div>
         <div class="domain-label">${fn.name}</div>
       </div>`;
   }).join("");
