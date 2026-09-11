@@ -320,29 +320,86 @@ function renderFocus() {
   }
 
   const rows = sorted
-    .map(
-      (c) => `
-    <button class="focus-row" style="border-left:4px solid ${gapColor(c.gap)}" data-domain="${c.domain.code}" data-activity="${c.activity.id}">
-      <div>
-        <div class="meta">${c.domain.code}${c.driver ? " &middot; " + DRIVERS.find((d) => d.id === c.driver)?.label : ""}</div>
-        <div class="activity">${c.activity.label}</div>
-      </div>
-      <div class="focus-scores">
-        <div class="focus-score-dot"><div class="value">${c.competency}</div><div class="label">C</div></div>
-        <div class="focus-score-dot"><div class="value">${c.priority}</div><div class="label">P</div></div>
-        <div class="focus-gap" style="color:${gapColor(c.gap)}">+${c.gap}</div>
-      </div>
-    </button>`
-    )
+    .map((c) => {
+      const key = cellKey(c.domain.code, c.activity.id);
+      const detail = (typeof SCF_DETAIL !== "undefined" && SCF_DETAIL.activityControls[key]) || null;
+      const cmm = (typeof SCF_DETAIL !== "undefined" && SCF_DETAIL.domainCmm[c.domain.code]) || null;
+      const currentLevel = cmm ? cmm.find((l) => l.level === c.competency) : null;
+      const targetLevel = cmm ? cmm.find((l) => l.level === 5) : null;
+
+      const controlsHtml = detail
+        ? detail
+            .map(
+              (ctrl) => `
+          <div class="control-item">
+            <span class="control-id">${ctrl.id}</span>
+            <span class="control-name">${ctrl.name}</span>
+            <div class="control-desc">${ctrl.description}</div>
+          </div>`
+            )
+            .join("")
+        : "";
+
+      const levelsHtml = currentLevel && targetLevel
+        ? `
+          <div class="level-compare">
+            <div class="level-card">
+              <div class="level-card-head">Where you are — Level ${currentLevel.level}: ${currentLevel.label}</div>
+              <div class="level-card-text">${currentLevel.text}</div>
+            </div>
+            <div class="level-card level-card-target">
+              <div class="level-card-head">Level 5: ${targetLevel.label}</div>
+              <div class="level-card-text">${targetLevel.text}</div>
+            </div>
+          </div>`
+        : "";
+
+      return `
+      <div class="focus-item">
+        <button class="focus-row" style="border-left:4px solid ${gapColor(c.gap)}" data-key="${key}">
+          <div>
+            <div class="meta">${c.domain.code}${c.driver ? " &middot; " + DRIVERS.find((d) => d.id === c.driver)?.label : ""}</div>
+            <div class="activity">${c.activity.label}</div>
+          </div>
+          <div class="focus-scores">
+            <div class="focus-score-dot"><div class="value">${c.competency}</div><div class="label">C</div></div>
+            <div class="focus-score-dot"><div class="value">${c.priority}</div><div class="label">P</div></div>
+            <div class="focus-gap" style="color:${gapColor(c.gap)}">+${c.gap}</div>
+            <span class="focus-chevron">&rsaquo;</span>
+          </div>
+        </button>
+        <div class="focus-detail" id="detail-${key}" hidden>
+          ${levelsHtml}
+          ${detail ? `<div class="controls-head">Controls behind this activity (SCF)</div><div class="controls-list">${controlsHtml}</div>` : ""}
+          <button class="edit-rating-btn" data-domain="${c.domain.code}" data-activity="${c.activity.id}">Update rating</button>
+        </div>
+      </div>`;
+    })
     .join("");
 
   el.innerHTML = `
-    <p class="focus-intro">Scored activities where priority outweighs competency, ranked by the size of the gap.</p>
+    <p class="focus-intro">Scored activities where priority outweighs competency, ranked by the size of the gap. Click any item to see what good looks like.</p>
     <div class="focus-list">${rows}</div>
   `;
 
   el.querySelectorAll(".focus-row").forEach((row) => {
-    row.addEventListener("click", () => openModal(row.dataset.domain, row.dataset.activity));
+    row.addEventListener("click", () => {
+      const panel = document.getElementById(`detail-${row.dataset.key}`);
+      const wasHidden = panel.hidden;
+      el.querySelectorAll(".focus-detail").forEach((p) => (p.hidden = true));
+      el.querySelectorAll(".focus-row").forEach((r) => r.classList.remove("expanded"));
+      if (wasHidden) {
+        panel.hidden = false;
+        row.classList.add("expanded");
+      }
+    });
+  });
+
+  el.querySelectorAll(".edit-rating-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openModal(btn.dataset.domain, btn.dataset.activity);
+    });
   });
 }
 
