@@ -369,7 +369,7 @@ function renderFocus() {
 
       const practiceHtml = c.currentPractice
         ? `<div class="practice-card"><div class="practice-card-head">What you said you currently do</div><div class="practice-card-text">${c.currentPractice}</div></div>`
-        : `<div class="practice-card practice-card-empty">Add what you currently do here (via "Update rating") to get more tailored guidance later.</div>`;
+        : `<button class="practice-card practice-card-empty" data-domain="${c.domain.code}" data-activity="${c.activity.id}">+ Add what you currently do here, to get more tailored guidance later</button>`;
 
       return `
       <div class="focus-item">
@@ -413,7 +413,7 @@ function renderFocus() {
     });
   });
 
-  el.querySelectorAll(".edit-rating-btn").forEach((btn) => {
+  el.querySelectorAll(".edit-rating-btn, .practice-card-empty").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       openModal(btn.dataset.domain, btn.dataset.activity);

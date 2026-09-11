@@ -570,10 +570,25 @@ body {
 }
 
 .practice-card-empty {
+  display: block;
+  width: 100%;
   border: 1px dashed var(--border);
+  background: none;
   color: var(--muted);
   font-size: 12.5px;
+  font-family: "IBM Plex Sans", sans-serif;
   font-style: italic;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.practice-card-empty:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+  background: var(--surface);
 }
 
 @media (max-width: 640px) {
