@@ -379,6 +379,29 @@ body {
   margin-top: 14px;
 }
 
+.matrix-dot {
+  cursor: pointer;
+  transition: r 0.1s ease;
+}
+
+.matrix-dot:hover {
+  r: 9;
+}
+
+.matrix-tooltip {
+  position: fixed;
+  z-index: 60;
+  background: var(--ink);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: "IBM Plex Sans", sans-serif;
+  max-width: 240px;
+  pointer-events: none;
+  line-height: 1.4;
+}
+
 .empty-state {
   border: 1px dashed var(--border);
   border-radius: 4px;

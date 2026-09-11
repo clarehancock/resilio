@@ -240,52 +240,65 @@ function renderMatrix() {
     return;
   }
 
-  const W = 640,
-    H = 420,
-    PAD = 44;
-  const scale = (v) => PAD + ((v - 0.5) / 5) * (W - PAD * 2);
-  const scaleY = (v) => H - PAD - ((v - 0.5) / 5) * (H - PAD * 2);
+  const SIZE = 560,
+    PAD = 48;
+  const scale = (v) => PAD + ((v - 0.5) / 5) * (SIZE - PAD * 2);
+  const scaleY = (v) => SIZE - PAD - ((v - 0.5) / 5) * (SIZE - PAD * 2);
+  const mid = scale(3); // true center of the 1-5 scale, not 2.5
 
   let points = "";
   cells.forEach((c) => {
+    const fn = FUNCTIONS.find((f) => f.id === c.activity.fn);
     const x = scale(c.competency);
     const y = scaleY(c.priority);
-    points += `<circle cx="${x}" cy="${y}" r="6" fill="${c.domain.color}" fill-opacity="0.85">
-      <title>${c.domain.code}\n${c.activity.label}\nC${c.competency} P${c.priority}</title>
-    </circle>`;
+    points += `<circle cx="${x}" cy="${y}" r="7" fill="${fn.color}" fill-opacity="0.88" stroke="#fff" stroke-width="1.5"
+      class="matrix-dot" data-domain="${c.domain.code}" data-activity="${c.activity.id}"
+      data-label="${c.activity.label}" data-fn="${fn.name}" data-code="${c.domain.code}"
+      data-c="${c.competency}" data-p="${c.priority}" />`;
   });
 
-  const midX = scale(2.5),
-    midY = scaleY(2.5);
-
-  const legend = Object.values(
-    cells.reduce((acc, c) => {
-      acc[c.domain.code] = c.domain;
-      return acc;
-    }, {})
-  )
-    .map((d) => `<div class="legend-item"><span class="legend-swatch" style="background:${d.color}"></span>${d.name}</div>`)
+  const legend = FUNCTIONS.filter((fn) => cells.some((c) => c.activity.fn === fn.id))
+    .map((fn) => `<div class="legend-item"><span class="legend-swatch" style="background:${fn.color}"></span>${fn.name}</div>`)
     .join("");
 
   el.innerHTML = `
-    <p class="matrix-intro">Each point is a scored activity. Low competency + high priority (top left) is where to focus next.</p>
+    <p class="matrix-intro">Each point is a scored activity, colored by function. Low competency + high priority (top left) is where to focus next.</p>
     <div class="matrix-panel">
       <div class="quadrant-label" style="top:22px;left:30px;color:var(--red)">FIX NOW</div>
       <div class="quadrant-label" style="top:22px;right:20px;color:var(--green)">PROTECT</div>
       <div class="quadrant-label" style="bottom:40px;left:30px;color:var(--muted)">MONITOR</div>
       <div class="quadrant-label" style="bottom:40px;right:20px;color:var(--amber)">MAINTAIN</div>
-      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
-        <line x1="${midX}" y1="${PAD}" x2="${midX}" y2="${H - PAD}" stroke="var(--border)" stroke-dasharray="4 4" />
-        <line x1="${PAD}" y1="${midY}" x2="${W - PAD}" y2="${midY}" stroke="var(--border)" stroke-dasharray="4 4" />
-        <line x1="${PAD}" y1="${H - PAD}" x2="${W - PAD}" y2="${H - PAD}" stroke="var(--border)" />
-        <line x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${H - PAD}" stroke="var(--border)" />
-        <text x="${W / 2}" y="${H - 10}" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="IBM Plex Sans">Competency</text>
-        <text x="16" y="${H / 2}" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="IBM Plex Sans" transform="rotate(-90 16 ${H / 2})">Priority</text>
+      <svg viewBox="0 0 ${SIZE} ${SIZE}" style="width:100%;height:auto;display:block" id="matrix-svg">
+        <line x1="${mid}" y1="${PAD}" x2="${mid}" y2="${SIZE - PAD}" stroke="var(--border)" stroke-dasharray="4 4" />
+        <line x1="${PAD}" y1="${mid}" x2="${SIZE - PAD}" y2="${mid}" stroke="var(--border)" stroke-dasharray="4 4" />
+        <line x1="${PAD}" y1="${SIZE - PAD}" x2="${SIZE - PAD}" y2="${SIZE - PAD}" stroke="var(--border)" />
+        <line x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${SIZE - PAD}" stroke="var(--border)" />
+        <text x="${SIZE / 2}" y="${SIZE - 12}" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="IBM Plex Sans">Competency</text>
+        <text x="16" y="${SIZE / 2}" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="IBM Plex Sans" transform="rotate(-90 16 ${SIZE / 2})">Priority</text>
         ${points}
       </svg>
     </div>
     <div class="matrix-legend">${legend}</div>
+    <div class="matrix-tooltip" id="matrix-tooltip" hidden></div>
   `;
+
+  const tooltip = document.getElementById("matrix-tooltip");
+  el.querySelectorAll(".matrix-dot").forEach((dot) => {
+    dot.addEventListener("mouseenter", () => {
+      tooltip.innerHTML = `${dot.dataset.code} &middot; ${dot.dataset.label}`;
+      tooltip.hidden = false;
+    });
+    dot.addEventListener("mousemove", (e) => {
+      tooltip.style.left = e.clientX + 14 + "px";
+      tooltip.style.top = e.clientY + 14 + "px";
+    });
+    dot.addEventListener("mouseleave", () => {
+      tooltip.hidden = true;
+    });
+    dot.addEventListener("click", () => {
+      openModal(dot.dataset.domain, dot.dataset.activity);
+    });
+  });
 }
 
 // ---- Focus view ----
@@ -336,9 +349,24 @@ function renderFocus() {
 // ---- Render everything ----
 
 function renderAll() {
-  renderGrid();
-  renderMatrix();
-  renderFocus();
+  try {
+    renderGrid();
+  } catch (err) {
+    console.error("Grid render failed:", err);
+    document.getElementById("view-grid").innerHTML = `<div class="empty-state">Something went wrong rendering the grid: ${err.message}. Check the browser console for details.</div>`;
+  }
+  try {
+    renderMatrix();
+  } catch (err) {
+    console.error("Matrix render failed:", err);
+    document.getElementById("view-matrix").innerHTML = `<div class="empty-state">Something went wrong rendering the matrix: ${err.message}. Check the browser console for details.</div>`;
+  }
+  try {
+    renderFocus();
+  } catch (err) {
+    console.error("Focus render failed:", err);
+    document.getElementById("view-focus").innerHTML = `<div class="empty-state">Something went wrong rendering the roadmap: ${err.message}. Check the browser console for details.</div>`;
+  }
 }
 
 renderAll();
