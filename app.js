@@ -79,43 +79,43 @@ function renderGrid() {
     (d) => `<div class="legend-item"><span class="legend-swatch" style="background:${d.color}"></span>${d.code} &middot; ${d.name}</div>`
   ).join("");
 
-  const clusters = PILLARS.map((pillar) => {
-    const domains = DOMAINS.filter((d) => d.pillar === pillar.id);
-    const columns = domains
-      .map((domain) => {
-        const boxes = domain.activities
-          .map((activity) => {
-            const key = cellKey(domain.code, activity.id);
-            const r = ratings[key];
-            const rated = r && r.competency != null && r.priority != null;
-            return `
-              <button class="activity-box" style="background:${domain.color}"
-                data-domain="${domain.code}" data-activity="${activity.id}">
-                ${activity.label}
-                ${rated ? `<span class="score-badge">C${r.competency}P${r.priority}</span>` : ""}
-              </button>`;
-          })
-          .join("");
+  const BOX_W = 146, GAP = 18; // must match .domain-column width and .domain-row gap in styles.css
+  const pillarBar = PILLARS.map((pillar) => {
+    const count = DOMAINS.filter((d) => d.pillar === pillar.id).length;
+    const width = count * BOX_W + (count - 1) * GAP;
+    return `<div class="pillar-heading" style="width:${width}px">${pillar.name}</div>`;
+  }).join("");
+
+  const columns = DOMAINS.map((domain) => {
+    const boxes = domain.activities
+      .map((activity) => {
+        const key = cellKey(domain.code, activity.id);
+        const r = ratings[key];
+        const rated = r && r.competency != null && r.priority != null;
         return `
-          <div class="domain-column">
-            ${boxes}
-            <div class="domain-label">${domain.name}</div>
-            <div class="domain-code">SCF &middot; ${domain.code}</div>
-          </div>`;
+          <button class="activity-box" style="background:${domain.color}"
+            data-domain="${domain.code}" data-activity="${activity.id}">
+            <span class="scf-tag">SCF &middot; ${domain.code}</span>
+            ${activity.label}
+            ${rated ? `<span class="score-badge">C${r.competency}P${r.priority}</span>` : ""}
+          </button>`;
       })
       .join("");
-
     return `
-      <div class="pillar-cluster">
-        <div class="pillar-heading">${pillar.name}</div>
-        <div class="pillar-columns">${columns}</div>
+      <div class="domain-column">
+        ${boxes}
+        <div class="domain-label">${domain.name}</div>
+        <div class="domain-code">SCF &middot; ${domain.code}</div>
       </div>`;
   }).join("");
 
   el.innerHTML = `
     <div class="grid-meta"><strong>${ratedCount} / ${totalCells}</strong> activities scored — click any box to rate it</div>
     <div class="legend">${legend}</div>
-    <div class="grid-scroll">${clusters}</div>
+    <div class="grid-scroll">
+      <div class="pillar-bar">${pillarBar}</div>
+      <div class="domain-row">${columns}</div>
+    </div>
   `;
 
   el.querySelectorAll(".activity-box").forEach((box) => {
