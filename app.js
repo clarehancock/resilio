@@ -75,40 +75,42 @@ function renderGrid() {
   const totalCells = DOMAINS.reduce((n, d) => n + d.activities.length, 0);
   const ratedCount = allRatedCells().length;
 
-  const BOX_W = 146, GAP = 18; // must match .domain-column width and .domain-row gap in styles.css
-  const pillarBar = PILLARS.map((pillar) => {
-    const count = DOMAINS.filter((d) => d.pillar === pillar.id).length;
-    const width = count * BOX_W + (count - 1) * GAP;
-    return `<div class="pillar-heading" style="width:${width}px">${pillar.name}</div>`;
-  }).join("");
+  const columns = FUNCTIONS.map((fn) => {
+    const items = [];
+    DOMAINS.forEach((domain) => {
+      domain.activities.forEach((activity) => {
+        if (activity.fn === fn.id) items.push({ domain, activity });
+      });
+    });
 
-  const columns = DOMAINS.map((domain) => {
-    const boxes = domain.activities
-      .map((activity) => {
+    const boxes = items
+      .map(({ domain, activity }) => {
         const key = cellKey(domain.code, activity.id);
         const r = ratings[key];
         const rated = r && r.competency != null && r.priority != null;
         const ringStyle = rated ? `box-shadow:0 0 0 3px ${gapColor(r.priority - r.competency)}` : "";
-        const title = rated ? `${activity.label} — Competency ${r.competency}, Priority ${r.priority}` : `${activity.label} — not yet rated`;
+        const title = rated
+          ? `${activity.label} (${domain.code}) — Competency ${r.competency}, Priority ${r.priority}`
+          : `${activity.label} (${domain.code}) — not yet rated`;
         return `
           <button class="activity-box" style="background:${domain.color};${ringStyle}"
             data-domain="${domain.code}" data-activity="${activity.id}" title="${title}">
+            <span class="scf-tag">${domain.code}</span>
             ${activity.label}
           </button>`;
       })
       .join("");
+
     return `
       <div class="domain-column">
         ${boxes}
-        <div class="domain-label">${domain.name}</div>
-        <div class="domain-code">SCF &middot; ${domain.code}</div>
+        <div class="domain-label">${fn.name}</div>
       </div>`;
   }).join("");
 
   el.innerHTML = `
     <div class="grid-meta"><strong>${ratedCount} / ${totalCells}</strong> activities scored — click any box to rate it</div>
     <div class="grid-scroll">
-      <div class="pillar-bar">${pillarBar}</div>
       <div class="domain-row">${columns}</div>
     </div>
   `;
