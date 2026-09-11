@@ -48,6 +48,7 @@ function allRatedCells() {
           competency: r.competency,
           priority: r.priority,
           driver: r.driver,
+          currentPractice: r.currentPractice,
           gap: r.priority - r.competency,
         });
       }
@@ -145,7 +146,7 @@ function openModal(domainCode, activityId) {
   const domain = DOMAINS.find((d) => d.code === domainCode);
   const activity = domain.activities.find((a) => a.id === activityId);
   const key = cellKey(domainCode, activityId);
-  const rating = ratings[key] || { competency: null, priority: null, driver: null };
+  const rating = ratings[key] || { competency: null, priority: null, driver: null, currentPractice: null };
 
   const root = document.getElementById("modal-root");
 
@@ -196,6 +197,12 @@ function openModal(domainCode, activityId) {
           <div class="driver-chips">${driverChips}</div>
         </div>
 
+        <div class="practice-row">
+          <div class="label">What do you currently do here?</div>
+          <div class="hint">Optional — a few sentences on your actual current practice. This will be used later to give you more tailored guidance.</div>
+          <textarea class="practice-input" id="practice-input" rows="3" placeholder="e.g. We run an annual risk assessment led by IT, but it's not tied to a formal register...">${rating.currentPractice || ""}</textarea>
+        </div>
+
         <div id="gap-summary">${gapText}</div>
       </div>
     </div>
@@ -222,6 +229,12 @@ function openModal(domainCode, activityId) {
       updateRating(domainCode, activityId, { driver: current.driver === driverId ? null : driverId });
       openModal(domainCode, activityId);
     });
+  });
+
+  root.querySelector("#practice-input").addEventListener("blur", (e) => {
+    updateRating(domainCode, activityId, { currentPractice: e.target.value });
+    // no re-render of the modal here - would drop focus mid-edit; the grid/matrix/focus views
+    // update via updateRating's renderAll(), the modal itself stays as-is.
   });
 }
 
@@ -354,6 +367,10 @@ function renderFocus() {
           </div>`
         : "";
 
+      const practiceHtml = c.currentPractice
+        ? `<div class="practice-card"><div class="practice-card-head">What you said you currently do</div><div class="practice-card-text">${c.currentPractice}</div></div>`
+        : `<div class="practice-card practice-card-empty">Add what you currently do here (via "Update rating") to get more tailored guidance later.</div>`;
+
       return `
       <div class="focus-item">
         <button class="focus-row" style="border-left:4px solid ${gapColor(c.gap)}" data-key="${key}">
@@ -369,6 +386,7 @@ function renderFocus() {
           </div>
         </button>
         <div class="focus-detail" id="detail-${key}" hidden>
+          ${practiceHtml}
           ${levelsHtml}
           ${detail ? `<div class="controls-head">Controls behind this activity (SCF)</div><div class="controls-list">${controlsHtml}</div>` : ""}
           <button class="edit-rating-btn" data-domain="${c.domain.code}" data-activity="${c.activity.id}">Update rating</button>
