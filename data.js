@@ -4,12 +4,12 @@
 // steps of one activity.
 
 const FUNCTIONS = [
-  { id: "govern", name: "Govern" },
-  { id: "identify", name: "Identify" },
-  { id: "protect", name: "Protect" },
-  { id: "detect", name: "Detect" },
-  { id: "respond", name: "Respond" },
-  { id: "recover", name: "Recover" },
+  { id: "govern", name: "Govern", color: "#2A4566" },
+  { id: "identify", name: "Identify", color: "#3E6B65" },
+  { id: "protect", name: "Protect", color: "#5B7553" },
+  { id: "detect", name: "Detect", color: "#6B5E8C" },
+  { id: "respond", name: "Respond", color: "#8C4B6B" },
+  { id: "recover", name: "Recover", color: "#B8863B" },
 ];
 
 const DOMAINS = [

@@ -1,11 +1,7 @@
 // ---- State ----
-// ratings: { "CODE-function": { competency, priority, driver } }
+// ratings: { "CODE-activityId": { competency, priority, driver, currentPractice, aiEstimatedLevel, aiReasoning, aiAssessedAt } }
 let ratings = {};
-try {
-  ratings = JSON.parse(localStorage.getItem("grc-ratings") || "{}");
-} catch (e) {
-  ratings = {};
-}
+let ASSESSEE = null; // { id, name }
 
 const DRIVERS = [
   { id: "strategic", label: "Strategic choice" },
@@ -18,16 +14,24 @@ function cellKey(domainCode, activityId) {
   return `${domainCode}-${activityId}`;
 }
 
-function saveRatings() {
-  localStorage.setItem("grc-ratings", JSON.stringify(ratings));
-}
-
-function updateRating(domainCode, activityId, patch) {
+async function updateRating(domainCode, activityId, patch) {
   const key = cellKey(domainCode, activityId);
-  const current = ratings[key] || { competency: null, priority: null, driver: null };
-  ratings[key] = { ...current, ...patch };
-  saveRatings();
+  const current = ratings[key] || { competency: null, priority: null, driver: null, currentPractice: null };
+  const next = { ...current, ...patch };
+  ratings[key] = next; // optimistic
   renderAll();
+  try {
+    await apiSaveRating(ASSESSEE.id, key, {
+      competency: next.competency,
+      priority: next.priority,
+      driver: next.driver,
+      currentPractice: next.currentPractice,
+    });
+  } catch (err) {
+    console.error("Failed to save rating:", err);
+    ratings[key] = current; // revert
+    renderAll();
+  }
 }
 
 function gapColor(gap) {
@@ -49,6 +53,8 @@ function allRatedCells() {
           priority: r.priority,
           driver: r.driver,
           currentPractice: r.currentPractice,
+          aiEstimatedLevel: r.aiEstimatedLevel,
+          aiReasoning: r.aiReasoning,
           gap: r.priority - r.competency,
         });
       }
@@ -57,17 +63,104 @@ function allRatedCells() {
   return out;
 }
 
-// ---- Tabs ----
+// ---- Identity gate ----
+// Name-only, no auth: re-entering the same name returns the same person's data.
+// This is intentional for an internal prototype - see README for the tradeoff.
 
-document.getElementById("tabs").addEventListener("click", (e) => {
-  const btn = e.target.closest(".tab");
-  if (!btn) return;
-  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-  btn.classList.add("active");
-  const target = btn.dataset.tab;
-  document.querySelectorAll(".view").forEach((v) => (v.hidden = true));
-  document.getElementById(`view-${target}`).hidden = false;
-});
+function renderGate(errorMsg) {
+  const root = document.getElementById("gate-root");
+  document.getElementById("page-root").hidden = true;
+  root.innerHTML = `
+    <div class="gate-wrap">
+      <div class="gate-card">
+        <div class="eyebrow">SCF-ANCHORED &middot; PROTOTYPE</div>
+        <h1 class="gate-title">The GRC Practice Framework</h1>
+        <p class="gate-subtitle">What's your name? Enter the same name next time to pick up where you left off.</p>
+        <form id="gate-form">
+          <input type="text" id="gate-name" class="gate-input" placeholder="e.g. Dave" autocomplete="off" data-lpignore="true" autofocus />
+          <button type="submit" class="gate-btn">Continue</button>
+        </form>
+        ${errorMsg ? `<div class="gate-error">${errorMsg}</div>` : ""}
+      </div>
+    </div>
+  `;
+  document.getElementById("gate-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = document.getElementById("gate-name").value.trim();
+    if (!name) return;
+    try {
+      const assessee = await apiFindOrCreateAssessee(name);
+      localStorage.setItem("grc-assessee", JSON.stringify(assessee));
+      await startApp(assessee);
+    } catch (err) {
+      renderGate(err.message || "Something went wrong - is the backend running?");
+    }
+  });
+}
+
+async function startApp(assessee) {
+  ASSESSEE = assessee;
+  try {
+    ratings = await apiFetchRatings(assessee.id);
+  } catch (err) {
+    renderGate(err.message || "Couldn't load your data - is the backend running?");
+    return;
+  }
+  document.getElementById("gate-root").innerHTML = "";
+  renderPageShell();
+  document.getElementById("page-root").hidden = false;
+  renderAll();
+}
+
+function switchUser() {
+  localStorage.removeItem("grc-assessee");
+  ASSESSEE = null;
+  ratings = {};
+  document.getElementById("page-root").hidden = true;
+  renderGate();
+}
+
+function renderPageShell() {
+  const root = document.getElementById("page-root");
+  root.innerHTML = `
+    <header class="header">
+      <div class="header-top">
+        <div class="eyebrow">SCF-ANCHORED &middot; PROTOTYPE</div>
+        <button class="switch-user-btn" id="switch-user-btn">${ASSESSEE.name} &middot; switch user</button>
+      </div>
+      <h1>The GRC Practice Framework</h1>
+      <p class="subtitle">
+        Security, Privacy &amp; AI Governance activities, drawn from the real Secure Controls
+        Framework (SCF) and mapped to ISO 27001, ISO 27701, ISO 42001, NIS2, DORA, SOC 2 and the
+        EU AI Act. Score your competency and priority for each activity to build a focused roadmap.
+      </p>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="grid">Framework Grid</button>
+      <button class="tab" data-tab="matrix">Priority Matrix</button>
+      <button class="tab" data-tab="focus">Focus Roadmap</button>
+    </nav>
+
+    <main>
+      <section id="view-grid" class="view"></section>
+      <section id="view-matrix" class="view" hidden></section>
+      <section id="view-focus" class="view" hidden></section>
+    </main>
+  `;
+
+  document.getElementById("tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest(".tab");
+    if (!btn) return;
+    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+    btn.classList.add("active");
+    const target = btn.dataset.tab;
+    document.querySelectorAll(".view").forEach((v) => (v.hidden = true));
+    document.getElementById(`view-${target}`).hidden = false;
+  });
+
+  document.getElementById("switch-user-btn").addEventListener("click", switchUser);
+}
 
 // ---- Grid view ----
 
@@ -201,6 +294,16 @@ function openModal(domainCode, activityId) {
           <div class="label">What do you currently do here?</div>
           <div class="hint">Optional — a few sentences on your actual current practice. This will be used later to give you more tailored guidance.</div>
           <textarea class="practice-input" id="practice-input" rows="3" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" placeholder="e.g. We run an annual risk assessment led by IT, but it's not tied to a formal register...">${rating.currentPractice || ""}</textarea>
+          <div class="practice-save-row">
+            <button class="practice-save-btn" id="practice-save-btn">Save note</button>
+            <span class="practice-saved-msg" id="practice-saved-msg" hidden>Saved &#10003;</span>
+          </div>
+        </div>
+
+        <div class="ai-check-row">
+          <div class="label">AI reality check</div>
+          <div class="hint">Compares your self-rating against the real SCF maturity levels, based on what you described above.</div>
+          <div id="ai-check-area">${renderAiCheckArea(rating)}</div>
         </div>
 
         <div id="gap-summary">${gapText}</div>
@@ -236,6 +339,72 @@ function openModal(domainCode, activityId) {
     // no re-render of the modal here - would drop focus mid-edit; the grid/matrix/focus views
     // update via updateRating's renderAll(), the modal itself stays as-is.
   });
+
+  root.querySelector("#practice-save-btn").addEventListener("click", () => {
+    const value = root.querySelector("#practice-input").value;
+    updateRating(domainCode, activityId, { currentPractice: value });
+    const msg = root.querySelector("#practice-saved-msg");
+    msg.hidden = false;
+    clearTimeout(msg._hideTimer);
+    msg._hideTimer = setTimeout(() => {
+      msg.hidden = true;
+    }, 2000);
+  });
+
+  const attachAiCheckHandler = () => {
+    const btn = root.querySelector("#ai-check-btn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const area = root.querySelector("#ai-check-area");
+      const currentText = root.querySelector("#practice-input").value;
+      area.innerHTML = `<div class="ai-loading">Checking against the real maturity levels...</div>`;
+      try {
+        const domainCmm = (typeof SCF_DETAIL !== "undefined" && SCF_DETAIL.domainCmm[domainCode]) || [];
+        const result = await apiRequestAssessment({
+          assesseeId: ASSESSEE.id,
+          activityKey: key,
+          domainName: domain.name,
+          domainCode: domain.code,
+          activityLabel: activity.label,
+          competency: rating.competency,
+          priority: rating.priority,
+          driver: rating.driver,
+          currentPractice: currentText,
+          cmmLevels: domainCmm,
+        });
+        ratings[key] = { ...ratings[key], aiEstimatedLevel: result.estimatedLevel, aiReasoning: result.reasoning };
+        area.innerHTML = renderAiCheckArea(ratings[key]);
+        attachAiCheckHandler();
+      } catch (err) {
+        area.innerHTML = `<div class="ai-check-error">${err.message}</div>` + renderAiCheckArea(rating, true);
+        attachAiCheckHandler();
+      }
+    });
+  };
+  attachAiCheckHandler();
+}
+
+function renderAiCheckArea(rating, keepButtonOnly) {
+  const btnLabel = rating.aiEstimatedLevel != null ? "Re-check" : "Check my rating";
+  const btn = `<button class="ai-check-btn" id="ai-check-btn">${btnLabel}</button>`;
+  if (keepButtonOnly || rating.aiEstimatedLevel == null) return btn;
+
+  const diff = rating.competency != null ? rating.aiEstimatedLevel - rating.competency : null;
+  const diffText =
+    diff == null
+      ? ""
+      : diff === 0
+      ? "That matches your self-rating."
+      : diff > 0
+      ? `That's higher than your self-rating of ${rating.competency} — you may be underselling yourself.`
+      : `That's lower than your self-rating of ${rating.competency} — worth a closer look.`;
+
+  return `
+    <div class="ai-result-card">
+      <div class="ai-result-head">AI estimate: Level ${rating.aiEstimatedLevel} <span class="ai-result-diff">${diffText}</span></div>
+      <div class="ai-result-text">${rating.aiReasoning}</div>
+    </div>
+    ${btn}`;
 }
 
 function closeModal() {
@@ -444,4 +613,19 @@ function renderAll() {
   }
 }
 
-renderAll();
+// ---- Init ----
+
+(function init() {
+  let cached = null;
+  try {
+    cached = JSON.parse(localStorage.getItem("grc-assessee") || "null");
+  } catch (e) {
+    cached = null;
+  }
+
+  if (cached && cached.id && cached.name) {
+    startApp(cached);
+  } else {
+    renderGate();
+  }
+})();
