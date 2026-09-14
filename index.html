@@ -10,36 +10,21 @@
     rel="stylesheet"
   />
   <link rel="stylesheet" href="styles.css" />
+  <script>
+    // Point this at your deployed backend before deploying. Defaults to localhost for dev.
+    window.GRC_API_URL = "https://resilio-spgd.onrender.com";
+  </script>
 </head>
 <body>
-  <div class="page">
-    <header class="header">
-      <div class="eyebrow">SCF-ANCHORED &middot; PROTOTYPE</div>
-      <h1>The GRC Practice Framework</h1>
-      <p class="subtitle">
-        Security, Privacy &amp; AI Governance activities, drawn from the real Secure Controls
-        Framework (SCF) and mapped to ISO 27001, ISO 27701, ISO 42001, NIS2, DORA, SOC 2 and the
-        EU AI Act. Score your competency and priority for each activity to build a focused roadmap.
-      </p>
-    </header>
+  <div id="gate-root"></div>
 
-    <nav class="tabs" id="tabs">
-      <button class="tab active" data-tab="grid">Framework Grid</button>
-      <button class="tab" data-tab="matrix">Priority Matrix</button>
-      <button class="tab" data-tab="focus">Focus Roadmap</button>
-    </nav>
-
-    <main>
-      <section id="view-grid" class="view"></section>
-      <section id="view-matrix" class="view" hidden></section>
-      <section id="view-focus" class="view" hidden></section>
-    </main>
-  </div>
+  <div class="page" id="page-root" hidden></div>
 
   <div id="modal-root"></div>
 
   <script src="data.js"></script>
   <script src="scf-detail.js"></script>
+  <script src="api.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
